@@ -7,19 +7,43 @@ import { estimateLockedSeed } from './cost.ts';
 import { previewGate } from './release-gate.ts';
 import { recordedReview } from './review-record.ts';
 import { simulate } from './simulation.ts';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import { draftWithClaude, modelResponse } from './claude.ts';
 import { z } from 'zod';
 import { measure, specSchema, templates } from './spec.ts';
 
-const db = new DatabaseSync('hook.sqlite');
-db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS reports (id TEXT PRIMARY KEY, data TEXT); CREATE TABLE IF NOT EXISTS budget (day TEXT PRIMARY KEY, micros INTEGER NOT NULL)');
+const operatorToken = process.env.HOOK_OPERATOR_TOKEN;
+const operatorMode = process.env.HOOK_OPERATOR_MODE === '1' && Boolean(operatorToken && operatorToken.length >= 32);
+const digest = (value: string) => createHash('sha256').update(value).digest();
+const expectedToken = operatorMode ? digest('Bearer ' + operatorToken) : undefined;
+const authorized = (header?: string) => Boolean(expectedToken && header && timingSafeEqual(digest(header), expectedToken));
+const db = new DatabaseSync(operatorMode ? (process.env.HOOK_DB_PATH ?? 'hook.sqlite') : ':memory:');
+db.exec('PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS reports (id TEXT PRIMARY KEY, data TEXT); CREATE TABLE IF NOT EXISTS budget (day TEXT PRIMARY KEY, micros INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS throttle (slot TEXT PRIMARY KEY, hits INTEGER NOT NULL)');
 const reserve = db.prepare('INSERT INTO budget VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET micros = micros + excluded.micros WHERE micros + excluded.micros <= ?');
 const limit = Math.floor(Number(process.env.HOOK_DAILY_BUDGET_USD ?? 1) * 1_000_000);
-const key = process.env.ANTHROPIC_API_KEY;
+const key = operatorMode ? process.env.ANTHROPIC_API_KEY : undefined;
+const hit = db.prepare('INSERT INTO throttle VALUES (?, 1) ON CONFLICT(slot) DO UPDATE SET hits = hits + 1 WHERE hits < ?');
+const prune = db.prepare('DELETE FROM throttle WHERE slot < ?');
+function throttle() {
+  const now = new Date().toISOString();
+  const day = now.slice(0, 10);
+  const minute = now.slice(0, 16);
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    prune.run(day);
+    const allowed = hit.run(minute, 2).changes && hit.run(day, 20).changes;
+    db.exec(allowed ? 'COMMIT' : 'ROLLBACK');
+    return Boolean(allowed);
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 const claude = key ? new Anthropic({ apiKey: key, maxRetries: 0, timeout: 20000 }) : undefined;
 const assets: Record<string, [string, string]> = {
+  '/demo-report.json': ['demo-report.json', 'application/json'], '/templates.json': ['templates.json', 'application/json'],
   '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'],
 };
 class RequestError extends Error {
@@ -30,19 +54,20 @@ class RequestError extends Error {
 createServer(async (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none'; base-uri 'none'");
-  const path = new URL(req.url ?? '/', 'http://localhost').pathname;
   const send = (code: number, data: unknown) => {
     res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify(data));
   };
   try {
+    const path = new URL(req.url ?? '/', 'http://localhost').pathname;
     if (path === '/api/launch') {
-      const gate = previewGate(recordedReview());
+      const gate = previewGate(authorized(req.headers.authorization) ? recordedReview() : undefined);
       return send(req.method === 'GET' ? 200 : 423, { ...gate, error: 'Preview: launches locked.' });
     }
     if (req.method === 'GET') {
       if (path === '/api/library') return send(200, { templates, ai: Boolean(claude) });
       if (/^\/api\/reports\/[a-f0-9-]{36}$/.test(path)) {
+        if (!authorized(req.headers.authorization)) return send(404, { error: 'Report unavailable.' });
         const row = db.prepare('SELECT data FROM reports WHERE id = ?').get(path.split('/').at(-1)!) as { data: string } | undefined;
         return row ? send(200, JSON.parse(row.data)) : send(404, { error: 'Report unavailable.' });
       }
@@ -53,6 +78,9 @@ createServer(async (req, res) => {
       }
     }
     if (req.method === 'POST' && path === '/api/draft') {
+      if (!operatorMode) return send(403, { error: 'Saved reports only in public preview.' });
+      if (!authorized(req.headers.authorization)) return send(401, { error: 'Operator access required.' });
+      if (!throttle()) return send(429, { error: 'Operator rehearsal limit reached. Try again later.' });
       if (req.headers['sec-fetch-site'] === 'cross-site' || req.headers['content-type'] !== 'application/json') throw new RequestError(415, 'Use a same-site JSON request.');
       let bytes = 0;
       const chunks: Buffer[] = [];

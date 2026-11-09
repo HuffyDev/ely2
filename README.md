@@ -4,7 +4,7 @@ Program your coin's behaviour in plain English. This preview turns requests into
 
 ## Run locally or on Replit
 
-Use Node.js 24 and run `npm ci` followed by `npm start`. Open port 3000, or set `PORT`. Library templates work without credentials. For free-form drafting, copy `.env.example` to `.env` and fill in `ANTHROPIC_API_KEY` locally. Use persistent storage for `hook.sqlite`. The daily AI cap defaults to $1 per UTC day, with a conservative $0.05 reserved before each small Sonnet 5.5 call, including failed calls. The API never requests a wallet key. Avoid using a public unrestricted deployment for paid AI access without authentication and traffic limits.
+Publish only the public directory for a static preview. No RPC, server or secrets are needed. Locally, Node 24 with npm ci and npm start serves the same saved demo. For authenticated, rate-limited live drafts and fork rehearsals, see PREVIEW-HOSTING.md.
 
 Run `npm test` for TypeScript tests. Install Foundry and run `forge test -vv` for local contract tests. The latter deploys a local v4 PoolManager, mines a real beforeSwap address, funds a two-sided test pool and executes buy/sell round trips for four wallet/trade profiles at three boundary times. The fee invariant has 1,024 fuzz cases. Test fixtures use a mintable test token. The fixed-supply token and attestation-gated atomic factory are tested candidates. The website issues no launch approvals.
 
@@ -43,7 +43,7 @@ The Elysium fork fixture uses approximately 1.63 million factory execution gas f
 
 ## Reproduce a pinned Elysium fork report
 
-Install Foundry, then set the following in .env and restart the website.
+Install Foundry and follow the private operator setup in PREVIEW-HOSTING.md. Set the following fork values in .env and restart the server.
 
 ```ini
 HOOK_FORK_RPC=https://rpc.volta.family
@@ -55,11 +55,11 @@ HOOK_FORGE_BIN can point to a local forge executable. Without fork settings, the
 
 ## Verify a real Claude key
 
-1. Add ANTHROPIC_API_KEY to the ignored .env and restart. Studio should show Claude Sonnet 5.5.
-2. Paraphrase the demo so it bypasses template matching. Try "For half an hour after the registered creator wallet sends tokens, charge a five percent sell fee." Confirm the Claude report shows a 5% triggered sell rate, 1,800 seconds, and the specified default steady rate of 0.3%.
-3. Ask for a blacklist or fee burn. Confirm the studio rejects it and offers a supported variant.
+1. Configure the private operator server as described in PREVIEW-HOSTING.md, add ANTHROPIC_API_KEY to the ignored .env and restart. Run npm run check:claude in the same local configuration.
+2. The smoke test paraphrases the demo so it bypasses template matching. Try "For half an hour after the registered creator wallet sends tokens, charge a five percent sell fee." Confirm the private report shows a 5% triggered sell rate, 1,800 seconds, and the specified default steady rate of 0.3%.
+3. Ask for a blacklist or fee burn. Confirm the private API rejects it and offers a supported variant.
 4. Confirm a real Anthropic request appears in your account usage and no secret appears in the browser response or logs. With a daily budget below $0.05, free-form requests should return a budget error while the template still runs.
-5. Confirm the report displays a pinned-fork result and Mainnet launch locked. A valid key does not enable wallet submission.
+5. Confirm the saved private report records a pinned-fork result and the public preview remains locked. A valid key does not enable wallet submission.
 
 ## Mainnet checklist
 

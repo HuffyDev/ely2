@@ -1,0 +1,18 @@
+[
+  {
+    "name": "Registered wallet trigger",
+    "text": "After a transfer out of the registered creator wallet, charge 5% on subsequent sells in the $HOOK pool for 30 minutes."
+  },
+  {
+    "name": "Steady fees",
+    "text": "Set a 0.3% fee on buys and sells."
+  },
+  {
+    "name": "Opening window",
+    "text": "Charge 2% on sells for ten minutes, then 0.5%. Charge 0.3% on buys throughout."
+  },
+  {
+    "name": "Fee-free debut",
+    "text": "Use no swap fees for the first hour, then 0.5% on buys and sells."
+  }
+]
