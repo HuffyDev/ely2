@@ -10,7 +10,7 @@ Run `npm test` for TypeScript tests. Install Foundry and run `forge test -vv` fo
 
 ## Typed spec v1
 
-Seven integers define the hook. `buyBps` and `sellBps` are steady LP fees. `openingBuyBps` and `openingSellBps` apply for `windowSeconds` after hook creation. The end is exclusive. Each fee is between 0 and 500 basis points. The window is 0–86,400 seconds. Opening fees must be zero when the window is disabled. The other two fields, triggerSellBps and triggerSeconds, elevate sell fees when the creator funds a sell through the factory router. Other routers and intermediary wallets bypass the trigger. The maximum applicable fee wins, and zero disables the trigger. These are LP fees. They accrue to liquidity positions. Protocol fees are separate.
+Seven integers define the hook. `buyBps` and `sellBps` are steady LP fees. `openingBuyBps` and `openingSellBps` apply for `windowSeconds` after hook creation. The end is exclusive. Each fee is between 0 and 500 basis points. The window is 0–86,400 seconds. Opening fees must be zero when the window is disabled. The other two fields, triggerSellBps and triggerSeconds, elevate sell fees after a nonzero outgoing transfer to another address from the registered creator wallet. The hook reads the token timestamp across routers and pools. The elevated fee applies to subsequent swaps in the launch pool. The initiating swap may already have calculated its fee before settlement. The maximum applicable fee wins, and zero disables the trigger. These are LP fees. They accrue to liquidity positions. Protocol fees are separate.
 
 The compiler combines fixed Foundry creation bytecode with ABI-encoded constructor values and finds a CREATE2 salt whose address has the v4 beforeInitialize and beforeSwap permission bits. The input must be a trusted build artifact. Model output is validated as data. Fee curves, wallet limits, deployer triggers, burn and fee splits are outside this preview.
 
@@ -37,7 +37,7 @@ Start with fees and one opening window. Defer wallet identity features, fee cust
 
 Proposed later economics are zero launch fee, 5% of a separately accounted hook fee for the treasury, and 2% of that same fee for an authenticated original library author on reuse. At a 5% hook fee those shares are 25 and 10 basis points of swap notional respectively, within the user-facing cap. This funds ongoing infrastructure without charging free pools. Treasury buybacks would be separate transactions with published receipts. The current LP-fee hook does not implement fee custody or enforce these rates.
 
-The Elysium fork fixture uses 1,552,126 factory execution gas for the creator-sell demo and just under 100 native HYPE, with tick 0 and 100 liquidity units. It locks a large unused token remainder at the factory. These parameters are for reproducibility, not a production liquidity recommendation. Quote execution gas × effective gas price plus rollup posting charges at the time of rehearsal, and show the HYPE seed separately as capital committed. Do not use Foundry's fixture gas as a launch estimate.
+The Elysium fork fixture uses approximately 1.61 million factory execution gas for the creator-sell demo and just under 100 native HYPE, with tick 0 and 100 liquidity units. It locks a large unused token remainder at the factory. These parameters are for reproducibility, not a production liquidity recommendation. Quote execution gas × effective gas price plus rollup posting charges at the time of rehearsal, and show the HYPE seed separately as capital committed. Do not use Foundry's fixture gas as a launch estimate.
 
 
 
@@ -51,12 +51,21 @@ HOOK_FORK_BLOCK=3122111
 HOOK_FORK_MANAGER=0xe2e105d3f7209a9da11f83ccf3e7398a753823f1
 ```
 
-HOOK_FORGE_BIN can point to a local forge executable. Without fork settings, the same fixture uses a locally deployed v4 PoolManager and the report labels that environment. Missing Foundry, timeouts or failing tests yield an unverified report. The run uses the exact draft rules with fixed fixture metadata, seed, creator allocation and swap sizes. It records positive native output for every holder round trip. The demo executes ten round trips: one before the creator sell and small, normal and large trades at each of 0, 1799 and 1800 seconds after it. It does not approve a creator-specific launch. The factory requires an immutable attester's signature binding chain, factory, manager, creator, funding, launch parameters, report hash and expiry. The fixture uses a test signer. Production signing, report replay and wallet submission remain disabled.
+HOOK_FORGE_BIN can point to a local forge executable. Without fork settings, the same fixture uses a locally deployed v4 PoolManager and the report labels that environment. Missing Foundry, timeouts or failing tests yield an unverified report. Without launch inputs, the demo runs with fixture inputs. The specific-launch form runs the supplied wallet, metadata, token salt, liquidity, opening tick, funding and allocation against the same factory source on the fork. It records positive native output for every holder round trip. The demo executes ten round trips: one before the creator sell and small, normal and large trades at each of 0, 1799 and 1800 seconds after it. The simulation deploys a temporary factory with a test signer. It does not approve a production transaction. The factory requires an immutable attester's signature binding chain, factory, manager, creator, funding, launch parameters, report hash and expiry. The fixture uses a test signer. Production signing, report replay and wallet submission remain disabled.
 
 ## Verify a real Claude key
 
 1. Add ANTHROPIC_API_KEY to the ignored .env and restart. Studio should show Claude Sonnet 5.5.
-2. Paraphrase the demo so it bypasses template matching. Try "For half an hour after the creator sells through the HOOK router, charge a five percent sell fee." Confirm the Claude report shows a 5% triggered sell rate, 1,800 seconds, and the specified default steady rate of 0.3%.
+2. Paraphrase the demo so it bypasses template matching. Try "For half an hour after the registered creator wallet sends tokens, charge a five percent sell fee." Confirm the Claude report shows a 5% triggered sell rate, 1,800 seconds, and the specified default steady rate of 0.3%.
 3. Ask for a blacklist or fee burn. Confirm the studio rejects it and offers a supported variant.
 4. Confirm a real Anthropic request appears in your account usage and no secret appears in the browser response or logs. With a daily budget below $0.05, free-form requests should return a budget error while the template still runs.
 5. Confirm the report displays a pinned-fork result and Mainnet launch locked. A valid key does not enable wallet submission.
+
+## Mainnet checklist
+
+1. Independently review the fixed-supply token, timestamp trigger, transfer and allowance compatibility, factory, immutable attester and signed approval domain. Check the ticker and verify source and deployed code.
+2. Select the actual creator, token metadata, salts, pool tick, liquidity and allocation. Review the irrecoverable liquidity and any token remainder held by the factory. The contract requires at least 0.1 HYPE in the locked position.
+3. Rehearse the exact final calldata and value against the intended factory and PoolManager on a pinned fork and then testnet where available. Recheck expiry, replay, modified inputs, price movement, exact-output routes and holder sellability at each phase. Use no production key in simulation.
+4. Produce a production report that attests the final factory address and code, calldata, value, creator and observed results. Wire a controlled signer to issue the factory approval only after successful replay. Preview reports currently bind simulation evidence by hash but carry no production approval.
+5. Estimate the exact approved call with Elysium's Arbitrum NodeInterface, including its parent-chain posting component. Show HYPE and estimated USD for transaction fees and locked capital separately before wallet signing. Current reports show measured simulation execution gas and a HYPE/USDC midpoint estimate of locked capital when available. They do not quote an all-in signing cost.
+6. Keep submission disabled until these checks and security review are complete. No mainnet deployment or funds movement is part of this preview.

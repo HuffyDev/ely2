@@ -1,6 +1,9 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { launchInput } from './launch-input.ts';
+import { keccak256, toHex } from 'viem';
+import { estimateLockedSeed } from './cost.ts';
 import { simulate } from './simulation.ts';
 import { randomUUID } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
@@ -54,8 +57,8 @@ createServer(async (req, res) => {
       }
       let input: unknown;
       try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new RequestError(400, 'Invalid JSON.'); }
-      const draft = z.strictObject({ prompt: z.string().trim().min(1).max(1500) }).safeParse(input);
-      if (!draft.success) throw new RequestError(400, 'Enter a behaviour between 1 and 1,500 characters.');
+      const draft = z.strictObject({ prompt: z.string().trim().min(1).max(1500), launch: launchInput.optional() }).safeParse(input);
+      if (!draft.success) throw new RequestError(400, 'Check the behaviour and launch parameters.');
       const prompt = draft.data.prompt;
       const preset = templates.find(t => t.text === prompt);
       let result: z.infer<typeof modelResponse> = { supported: true, explanation: '', spec: templates[0].spec };
@@ -72,8 +75,12 @@ createServer(async (req, res) => {
       if (!result.supported) return send(422, { error: result.explanation });
       const id = randomUUID();
       const spec = specSchema.parse(result.spec);
-      const simulation = await simulate(spec);
-      const report = { id, spec, checks: measure(spec), simulation, launchReady: false, source: preset ? 'Library template' : 'Claude Sonnet 5.5' };
+      const launch = draft.data.launch ?? null;
+      const simulation = await simulate(spec, launch ?? undefined);
+      const evidence = { id, spec, launch, simulation };
+      const reportHash = keccak256(toHex(JSON.stringify(evidence)));
+      const cost = simulation.nativeSeedWei ? await estimateLockedSeed(simulation.nativeSeedWei) : null;
+      const report = { ...evidence, reportHash, cost, checks: measure(spec), launchReady: false, source: preset ? 'Library template' : 'Claude Sonnet 5.5' };
       db.prepare('INSERT INTO reports VALUES (?, ?)').run(id, JSON.stringify(report));
       return send(201, report);
     }

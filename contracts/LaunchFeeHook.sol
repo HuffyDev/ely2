@@ -9,6 +9,7 @@ import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeS
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {LPFeeLibrary} from "v4-core/src/libraries/LPFeeLibrary.sol";
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
+import {FixedToken} from "./FixedToken.sol";
 import {FeeRules} from "./FeeRules.sol";
 
 contract LaunchFeeHook {
@@ -25,7 +26,7 @@ contract LaunchFeeHook {
     address public immutable router;
     uint16 public immutable triggerSellBps;
     uint32 public immutable triggerSeconds;
-    uint256 public elevatedUntil;
+
 
     error InvalidPool();
 
@@ -53,20 +54,21 @@ contract LaunchFeeHook {
         return IHooks.beforeInitialize.selector;
     }
 
-    function beforeSwap(address sender, PoolKey calldata key, SwapParams calldata params, bytes calldata data)
-        external returns (bytes4, BeforeSwapDelta, uint24)
+    function elevatedUntil() public view returns (uint256) {
+        if (triggerSeconds == 0) return 0;
+        uint256 last = FixedToken(token).lastCreatorTransfer();
+        return last == 0 ? 0 : last + triggerSeconds;
+    }
+
+    function beforeSwap(address, PoolKey calldata key, SwapParams calldata params, bytes calldata)
+        external view returns (bytes4, BeforeSwapDelta, uint24)
     {
         if (msg.sender != address(manager)) revert InvalidPool();
         validatePool(key);
         FeeRules.Spec memory spec = FeeRules.Spec(buyBps, sellBps, openingBuyBps, openingSellBps, windowSeconds, triggerSellBps, triggerSeconds);
         uint24 fee = FeeRules.fee(spec, !params.zeroForOne, block.timestamp - startsAt);
-        if (!params.zeroForOne && triggerSeconds != 0) {
-            if (sender == router && data.length == 32 && abi.decode(data, (address)) == creator) {
-                elevatedUntil = block.timestamp + triggerSeconds;
-            }
-            uint24 elevated = uint24(triggerSellBps) * 100;
-            if (block.timestamp < elevatedUntil && elevated > fee) fee = elevated;
-        }
+        uint24 elevated = uint24(triggerSellBps) * 100;
+        if (!params.zeroForOne && elevated > fee && block.timestamp < elevatedUntil()) fee = elevated;
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
 

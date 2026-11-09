@@ -20,6 +20,7 @@ contract LaunchFactory {
     uint256 public constant MIN_HYPE = 0.1 ether;
     uint256 public constant MAX_CREATOR = SUPPLY / 10;
     mapping(address => address) public hookOf;
+    mapping(bytes32 => bool) public usedReport;
     bool private entered;
 
     struct Launch {
@@ -61,14 +62,15 @@ contract LaunchFactory {
     function launch(Launch calldata p, bytes32 reportHash, uint256 expiry, uint8 v, bytes32 r, bytes32 s)
         external payable guarded returns (address token, address hook)
     {
-        if (reportHash == 0 || expiry < block.timestamp || msg.value < MIN_HYPE ||
+        if (reportHash == 0 || usedReport[reportHash] || expiry < block.timestamp || msg.value < MIN_HYPE ||
             p.creatorAllocation > MAX_CREATOR || p.liquidity == 0 ||
             p.initialTick <= -887220 || p.initialTick >= 887220) revert InvalidLaunch();
         bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", approvalHash(p, msg.sender, msg.value, reportHash, expiry)));
         if (ecrecover(digest, v, r, s) != attester) revert Unauthorized();
 
+        usedReport[reportHash] = true;
         bytes32 salt = keccak256(abi.encode(msg.sender, p.tokenSalt));
-        FixedToken coin = new FixedToken{salt: salt}(p.name, p.symbol, SUPPLY);
+        FixedToken coin = new FixedToken{salt: salt}(p.name, p.symbol, SUPPLY, msg.sender);
         token = address(coin);
         hook = address(new LaunchFeeHook{salt: p.hookSalt}(manager, token, p.rules, msg.sender, address(this)));
         hookOf[token] = hook;
@@ -113,7 +115,7 @@ contract LaunchFactory {
             return abi.encode(hype, tokens);
         }
         BalanceDelta trade = manager.swap(key, SwapParams(buy, -int256(amount),
-            buy ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1), abi.encode(payer));
+            buy ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1), "");
         uint256 spent = uint256(-int256(buy ? trade.amount0() : trade.amount1()));
         int128 received = buy ? trade.amount1() : trade.amount0();
         if (received <= 0 || uint128(received) < minOut || spent != amount) revert InvalidSwap();

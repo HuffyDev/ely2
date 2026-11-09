@@ -22,6 +22,22 @@ const use = template => {
   $('prompt').focus();
   location.hash = 'studio';
 };
+$('tokenSalt').value = '0x' + Array.from(crypto.getRandomValues(new Uint8Array(32)), n => n.toString(16).padStart(2, '0')).join('');
+function atomicUnits(value) {
+  if (!/^\d{1,20}(\.\d{1,18})?$/.test(value)) throw Error('Enter a nonnegative amount with up to 18 decimal places.');
+  const [whole, fraction = ''] = value.split('.');
+  return (BigInt(whole) * 10n ** 18n + BigInt(fraction.padEnd(18, '0'))).toString();
+}
+function launchDetails() {
+  const creator = $('creator').value.trim();
+  if (!creator) return undefined;
+  return {
+    creator, name: $('coinName').value, symbol: $('symbol').value,
+    tokenSalt: $('tokenSalt').value, funding: atomicUnits($('funding').value),
+    liquidity: atomicUnits($('liquidity').value), initialTick: Number($('initialTick').value),
+    creatorAllocation: atomicUnits($('allocation').value),
+  };
+}
 function show(report) {
   const target = $('report');
   const table = el('table', '');
@@ -39,10 +55,19 @@ function show(report) {
     ? sim.roundTrips + ' holder round trips passed · ' + sim.environment + (sim.block ? ' at block ' + sim.block : '') + ' · ' + sim.executionGas.toLocaleString() + ' execution gas · seed ' + sim.nativeSeedWei + ' wei.'
     : sim?.reason ?? 'This report predates execution checks.';
   const note = report.spec.triggerSeconds
-    ? 'The schedule assumes the creator sells through the $HOOK router at elapsed time zero.'
+    ? 'The schedule assumes an outgoing transfer from the registered creator wallet at elapsed time zero.'
     : 'The schedule shows LP fees at the phase boundaries.';
   target.replaceChildren(el('div', report.source, 'eyebrow'), el('h2', 'Behaviour report'), el('p', note), table,
-    el('p', result), link);
+    el('p', result));
+  if (report.launch) target.append(el('p', 'Tested ' + report.launch.name + ' (' + report.launch.symbol + ') for ' + report.launch.creator + '.'));
+  if (report.cost) {
+    const dollars = report.cost.seedUsd == null ? 'USD estimate unavailable' :
+      'approximately ' + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(report.cost.seedUsd) +
+      ' at the HYPE/USDC spot midpoint (' + report.cost.asOf + ')';
+    target.append(el('p', report.cost.seedHype + ' HYPE permanently locked · ' + dollars + '.'));
+  }
+  if (report.reportHash) target.append(el('p', 'Report hash ' + report.reportHash, 'report-hash'));
+  target.append(el('p', 'A signing quote including rollup posting charges is unavailable while launch is locked.'), link);
 }
 async function read(url, options) {
   const res = await fetch(url, options);
@@ -57,7 +82,7 @@ $('draft').addEventListener('submit', async event => {
   $('error').textContent = '';
   button.textContent = 'Drafting…';
   try {
-    const report = await read('/api/draft', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ prompt: $('prompt').value }) });
+    const report = await read('/api/draft', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ prompt: $('prompt').value, launch: launchDetails() }) });
     show(report);
     history.replaceState(null, '', '/?report=' + report.id + '#studio');
   } catch (error) {
