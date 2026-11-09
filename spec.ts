@@ -14,7 +14,7 @@ export const specSchema = z.strictObject({
 export type Spec = z.infer<typeof specSchema>;
 
 export const templates = [
-  { name: 'Creator sell trigger', text: 'If the dev sells, raise sell fees to 5% for 30 minutes.', spec: { buyBps: 30, sellBps: 30, openingBuyBps: 0, openingSellBps: 0, windowSeconds: 0, triggerSellBps: 500, triggerSeconds: 1800 } },
+  { name: 'Registered wallet trigger', text: 'After a transfer out of the registered creator wallet, charge 5% on subsequent sells in the $HOOK pool for 30 minutes.', spec: { buyBps: 30, sellBps: 30, openingBuyBps: 0, openingSellBps: 0, windowSeconds: 0, triggerSellBps: 500, triggerSeconds: 1800 } },
   { name: 'Steady fees', text: 'Set a 0.3% fee on buys and sells.', spec: { buyBps: 30, sellBps: 30, openingBuyBps: 0, openingSellBps: 0, windowSeconds: 0, triggerSellBps: 0, triggerSeconds: 0 } },
   { name: 'Opening window', text: 'Charge 2% on sells for ten minutes, then 0.5%. Charge 0.3% on buys throughout.', spec: { buyBps: 30, sellBps: 50, openingBuyBps: 30, openingSellBps: 200, windowSeconds: 600, triggerSellBps: 0, triggerSeconds: 0 } },
   { name: 'Fee-free debut', text: 'Use no swap fees for the first hour, then 0.5% on buys and sells.', spec: { buyBps: 50, sellBps: 50, openingBuyBps: 0, openingSellBps: 0, windowSeconds: 3600, triggerSellBps: 0, triggerSeconds: 0 } },

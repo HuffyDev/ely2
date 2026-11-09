@@ -5,7 +5,10 @@
   "scripts": {
     "test": "node --test test/*.test.ts",
     "start": "node --env-file-if-exists=.env server.ts",
-    "contracts": "forge test"
+    "contracts": "forge test",
+    "check:claude": "node --env-file-if-exists=.env scripts/check-claude.ts",
+    "review:record": "node scripts/record-review.ts",
+    "quote:launch": "node scripts/quote-launch.ts"
   },
   "keywords": [],
   "author": "",

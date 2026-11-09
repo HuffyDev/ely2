@@ -4,6 +4,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { launchInput } from './launch-input.ts';
 import { keccak256, toHex } from 'viem';
 import { estimateLockedSeed } from './cost.ts';
+import { previewGate } from './release-gate.ts';
+import { recordedReview } from './review-record.ts';
 import { simulate } from './simulation.ts';
 import { randomUUID } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
@@ -34,6 +36,10 @@ createServer(async (req, res) => {
     res.end(JSON.stringify(data));
   };
   try {
+    if (path === '/api/launch') {
+      const gate = previewGate(recordedReview());
+      return send(req.method === 'GET' ? 200 : 423, { ...gate, error: 'Preview: launches locked.' });
+    }
     if (req.method === 'GET') {
       if (path === '/api/library') return send(200, { templates, ai: Boolean(claude) });
       if (/^\/api\/reports\/[a-f0-9-]{36}$/.test(path)) {
@@ -80,7 +86,7 @@ createServer(async (req, res) => {
       const evidence = { id, spec, launch, simulation };
       const reportHash = keccak256(toHex(JSON.stringify(evidence)));
       const cost = simulation.nativeSeedWei ? await estimateLockedSeed(simulation.nativeSeedWei) : null;
-      const report = { ...evidence, reportHash, cost, checks: measure(spec), launchReady: false, source: preset ? 'Library template' : 'Claude Sonnet 5.5' };
+      const report = { ...evidence, reportHash, cost, checks: measure(spec), launchReady: previewGate().allowed, source: preset ? 'Library template' : 'Claude Sonnet 5.5' };
       db.prepare('INSERT INTO reports VALUES (?, ?)').run(id, JSON.stringify(report));
       return send(201, report);
     }

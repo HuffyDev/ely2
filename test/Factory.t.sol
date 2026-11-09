@@ -19,6 +19,8 @@ import {FeeRules} from "../contracts/FeeRules.sol";
 contract FactoryTest is Test {
     receive() external payable {}
 
+    function currentChain() external view returns (uint256) { return block.chainid; }
+
     uint256 private constant SIGNER = 0xA77E57;
 
     function test_AtomicLaunchAndCreatorTrigger() public {
@@ -50,18 +52,42 @@ contract FactoryTest is Test {
         while (uint160(predict(address(factory), p.hookSalt, hookHash)) & 0x3fff != 0x2080) {
             p.hookSalt = bytes32(uint256(p.hookSalt) + 1);
         }
-        uint256 expiry = block.timestamp + 300;
+        uint256 expiry = vm.getBlockTimestamp() + 300;
         bytes32 reportHash = keccak256("local execution fixture");
-        bytes32 approval = factory.approvalHash(p, creator, funding, reportHash, expiry);
+        bytes32 approval = factory.approvalHash(p, creator, funding, reportHash, expiry, 1);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(SIGNER, keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", approval)));
+        vm.deal(creator, funding);
+        LaunchFactory otherFactory = new LaunchFactory(manager, vm.addr(SIGNER));
+        vm.prank(creator);
+        vm.expectRevert(LaunchFactory.Unauthorized.selector);
+        otherFactory.launch{value: funding}(p, reportHash, expiry, 1, abi.encodePacked(r, s, v));
+
+        vm.prank(creator);
+        vm.expectRevert(LaunchFactory.Unauthorized.selector);
+        factory.launch{value: funding}(p, reportHash, expiry, 2, abi.encodePacked(r, s, v));
+
+        uint256 chain = this.currentChain();
+        vm.chainId(chain + 1);
+        vm.prank(creator);
+        vm.expectRevert(LaunchFactory.Unauthorized.selector);
+        factory.launch{value: funding}(p, reportHash, expiry, 1, abi.encodePacked(r, s, v));
+        vm.chainId(chain);
+
+        uint256 timestamp = vm.getBlockTimestamp();
+        vm.warp(expiry + 1);
+        vm.prank(creator);
+        vm.expectRevert(LaunchFactory.InvalidLaunch.selector);
+        factory.launch{value: funding}(p, reportHash, expiry, 1, abi.encodePacked(r, s, v));
+        vm.warp(timestamp);
+
         vm.deal(creator, funding + 1);
         vm.prank(creator);
         vm.expectRevert(LaunchFactory.Unauthorized.selector);
-        factory.launch{value: funding + 1}(p, reportHash, expiry, v, r, s);
+        factory.launch{value: funding + 1}(p, reportHash, expiry, 1, abi.encodePacked(r, s, v));
 
         vm.prank(creator);
         uint256 gasBefore = gasleft();
-        (address deployed, address hook) = factory.launch{value: funding}(p, reportHash, expiry, v, r, s);
+        (address deployed, address hook) = factory.launch{value: funding}(p, reportHash, expiry, 1, abi.encodePacked(r, s, v));
         emit log_named_uint("fixture launch execution gas", gasBefore - gasleft());
         emit log_named_uint("fixture native seed in wei", address(manager).balance - balanceBefore);
         emit log_named_bytes32("fixture hook salt", p.hookSalt);
@@ -78,7 +104,7 @@ contract FactoryTest is Test {
         vm.deal(creator, funding);
         vm.prank(creator);
         vm.expectRevert(LaunchFactory.InvalidLaunch.selector);
-        factory.launch{value: funding}(p, reportHash, expiry, v, r, s);
+        factory.launch{value: funding}(p, reportHash, expiry, 1, abi.encodePacked(r, s, v));
         assertEq(FixedToken(token).totalSupply(), factory.SUPPLY());
         roundTrip(factory, token, makeAddr("pre-trigger holder"), 1e9);
         assertEq(LaunchFeeHook(hook).elevatedUntil(), 0);
@@ -109,6 +135,57 @@ contract FactoryTest is Test {
             roundTrip(factory, token, makeAddr("large holder"), 2 ether);
         }
         if (!vm.envOr("SIM_DRAFT", false)) exerciseOtherPaths(factory, manager, FixedToken(token), LaunchFeeHook(hook), creator);
+    }
+
+    // Read-only rehearsal for a future verified factory. No signing or broadcasting.
+    function test_ExactApprovedReplay() public {
+        bytes memory callData = vm.envOr("REPLAY_CALLDATA", bytes(""));
+        vm.skip(callData.length == 0);
+        address target = vm.envAddress("REPLAY_FACTORY");
+        address creator = vm.envAddress("REPLAY_CREATOR");
+        uint256 value = vm.envUint("REPLAY_FUNDING_WEI");
+        assertEq(block.chainid, vm.envUint("REPLAY_CHAIN_ID"));
+        assertEq(block.number, vm.envUint("REPLAY_BLOCK"));
+        assertGt(target.code.length, 0);
+        assertEq(target.codehash, vm.envBytes32("REPLAY_FACTORY_CODEHASH"));
+        LaunchFactory factory = LaunchFactory(target);
+        assertEq(address(factory.manager()), vm.envAddress("REPLAY_MANAGER"));
+        assertEq(address(factory.manager()).codehash, vm.envBytes32("REPLAY_MANAGER_CODEHASH"));
+        assertEq(factory.attester(), vm.envAddress("REPLAY_ATTESTER"));
+
+        uint256 nativeBefore = address(factory.manager()).balance;
+        require(callData.length >= 4 && bytes4(callData) == LaunchFactory.launch.selector, "Expected factory launch calldata");
+        vm.prank(creator);
+        (bool ok, bytes memory result) = target.call{value: value}(callData);
+        assertTrue(ok, "Exact approved call reverted");
+        emit log_named_uint("replayed locked seed in wei", address(factory.manager()).balance - nativeBefore);
+        (address token, address hook) = abi.decode(result, (address, address));
+        assertEq(FixedToken(token).creator(), creator);
+        assertEq(FixedToken(token).lastCreatorTransfer(), 0);
+        assertEq(factory.hookOf(token), hook);
+
+        LaunchFeeHook rules = LaunchFeeHook(hook);
+        uint256 opened = block.timestamp;
+        uint256 opening = rules.windowSeconds();
+        uint256 trigger = rules.triggerSeconds();
+        roundTrip(factory, token, makeAddr("exact holder before trigger"), 0.001 ether);
+        if (trigger != 0) roundTrip(factory, token, creator, 0.001 ether);
+        uint256[5] memory phases = [uint256(0), opening == 0 ? 0 : opening - 1, opening,
+            trigger == 0 ? 0 : trigger - 1, trigger];
+        PoolSwapTest alternative = new PoolSwapTest(factory.manager());
+        PoolKey memory key = PoolKey(Currency.wrap(address(0)), Currency.wrap(token), 0x800000, 60, IHooks(hook));
+        for (uint256 i; i < phases.length; ++i) {
+            vm.warp(opened + phases[i]);
+            roundTrip(factory, token, makeAddr("exact small holder"), 1e9);
+            roundTrip(factory, token, makeAddr("exact normal holder"), 0.1 ether);
+            roundTrip(factory, token, makeAddr("exact large holder"), 2 ether);
+            address wallet = makeAddr("exact alternate holder");
+            vm.deal(wallet, 0.001 ether);
+            vm.prank(wallet);
+            uint128 amount = uint128(factory.swap{value: 0.001 ether}(token, true, 0.001 ether, 1, block.timestamp));
+            sellThrough(alternative, key, FixedToken(token), wallet, amount);
+        }
+        emit log_named_bytes32("replayed calldata hash", keccak256(callData));
     }
 
     function exerciseOtherPaths(LaunchFactory factory, IPoolManager manager, FixedToken coin, LaunchFeeHook hook, address creator)
@@ -161,13 +238,14 @@ contract FactoryTest is Test {
     }
 
     function roundTrip(LaunchFactory factory, address token, address holder, uint128 input) private {
+        uint256 startingTokens = FixedToken(token).balanceOf(holder);
         vm.deal(holder, input);
         vm.startPrank(holder);
         uint128 amount = uint128(factory.swap{value: input}(token, true, input, 1, block.timestamp));
         FixedToken(token).approve(address(factory), amount);
         uint256 received = factory.swap(token, false, amount, 1, block.timestamp);
         assertGt(received, 0);
-        assertEq(FixedToken(token).balanceOf(holder), 0);
+        assertEq(FixedToken(token).balanceOf(holder), startingTokens);
         vm.stopPrank();
         emit log_named_uint("holder sell output in wei", received);
     }

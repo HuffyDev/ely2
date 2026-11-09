@@ -55,3 +55,10 @@ footer { margin-top: 72px; border-top: 1px solid var(--line); color: var(--muted
 .launch-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(195px, 1fr)); gap: 10px; margin-top: 12px; }
 .launch-fields input { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: var(--background); color: var(--text); padding: 8px; font: inherit; }
 .report-hash { overflow-wrap: anywhere; font-size: 13px; }
+
+.strip { padding: 11px 14px; background: var(--tint); border: 1px solid var(--line); border-radius: 10px; }
+#release { color: var(--muted); font-size: 13px; padding-inline: 10px; }
+#release-checks { margin: 8px 0; padding-inline-start: 20px; }
+#report[aria-busy="true"] { opacity: .66; }
+#report table { font-size: clamp(12px, 3.3vw, 15px); }
+.launch-fields label { min-width: 0; }

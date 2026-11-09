@@ -10,7 +10,7 @@ $('theme').onclick = () => {
   localStorage.setItem('hook-theme', value);
   theme(value);
 };
-$('example').onclick = () => use({ text: 'If the dev sells, raise sell fees to 5% for 30 minutes.' });
+$('example').onclick = () => use({ text: 'After a transfer out of the registered creator wallet, charge 5% on subsequent sells in the $HOOK pool for 30 minutes.' });
 const el = (tag, value, className) => {
   const node = document.createElement(tag);
   node.textContent = value;
@@ -42,7 +42,7 @@ function show(report) {
   const target = $('report');
   const table = el('table', '');
   const header = table.createTHead().insertRow();
-  for (const label of ['Elapsed', 'Buy fee', 'Sell fee']) header.append(el('th', label));
+  for (const label of ['Elapsed', 'Buy fee', 'Subsequent sell fee']) header.append(el('th', label));
   const body = table.createTBody();
   for (const check of report.checks) {
     const row = body.insertRow();
@@ -55,7 +55,7 @@ function show(report) {
     ? sim.roundTrips + ' holder round trips passed · ' + sim.environment + (sim.block ? ' at block ' + sim.block : '') + ' · ' + sim.executionGas.toLocaleString() + ' execution gas · seed ' + sim.nativeSeedWei + ' wei.'
     : sim?.reason ?? 'This report predates execution checks.';
   const note = report.spec.triggerSeconds
-    ? 'The schedule assumes an outgoing transfer from the registered creator wallet at elapsed time zero.'
+    ? 'The schedule applies to subsequent sells in the $HOOK pool after an outgoing transfer from the registered creator wallet. The initiating sale can pay the prior rate.'
     : 'The schedule shows LP fees at the phase boundaries.';
   target.replaceChildren(el('div', report.source, 'eyebrow'), el('h2', 'Behaviour report'), el('p', note), table,
     el('p', result));
@@ -80,7 +80,8 @@ $('draft').addEventListener('submit', async event => {
   const button = event.currentTarget.querySelector('button[type=submit]');
   button.disabled = true;
   $('error').textContent = '';
-  button.textContent = 'Drafting…';
+  button.textContent = 'Drafting and rehearsing…';
+  $('report').setAttribute('aria-busy', 'true');
   try {
     const report = await read('/api/draft', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ prompt: $('prompt').value, launch: launchDetails() }) });
     show(report);
@@ -88,6 +89,7 @@ $('draft').addEventListener('submit', async event => {
   } catch (error) {
     $('error').textContent = error.message;
   } finally {
+    $('report').removeAttribute('aria-busy');
     button.disabled = false;
     button.textContent = 'Draft and test ↗';
   }

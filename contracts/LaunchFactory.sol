@@ -13,6 +13,10 @@ import {FeeRules} from "./FeeRules.sol";
 import {LaunchFeeHook} from "./LaunchFeeHook.sol";
 
 /// @notice Candidate factory for isolated simulations. The attester is fixed at construction.
+interface IERC1271 {
+    function isValidSignature(bytes32 digest, bytes calldata signature) external view returns (bytes4);
+}
+
 contract LaunchFactory {
     IPoolManager public immutable manager;
     address public immutable attester;
@@ -21,6 +25,7 @@ contract LaunchFactory {
     uint256 public constant MAX_CREATOR = SUPPLY / 10;
     mapping(address => address) public hookOf;
     mapping(bytes32 => bool) public usedReport;
+    mapping(address => mapping(uint256 => bool)) public usedNonce;
     bool private entered;
 
     struct Launch {
@@ -53,22 +58,23 @@ contract LaunchFactory {
         entered = false;
     }
 
-    function approvalHash(Launch calldata p, address creator, uint256 funding, bytes32 reportHash, uint256 expiry)
+    function approvalHash(Launch calldata p, address creator, uint256 funding, bytes32 reportHash, uint256 expiry, uint256 nonce)
         public view returns (bytes32)
     {
-        return keccak256(abi.encode(block.chainid, address(this), address(manager), creator, funding, p, reportHash, expiry));
+        return keccak256(abi.encode(block.chainid, address(this), address(manager), creator, funding, p, reportHash, expiry, nonce));
     }
 
-    function launch(Launch calldata p, bytes32 reportHash, uint256 expiry, uint8 v, bytes32 r, bytes32 s)
+    function launch(Launch calldata p, bytes32 reportHash, uint256 expiry, uint256 nonce, bytes calldata signature)
         external payable guarded returns (address token, address hook)
     {
-        if (reportHash == 0 || usedReport[reportHash] || expiry < block.timestamp || msg.value < MIN_HYPE ||
+        if (reportHash == 0 || usedReport[reportHash] || usedNonce[msg.sender][nonce] || expiry < block.timestamp || msg.value < MIN_HYPE ||
             p.creatorAllocation > MAX_CREATOR || p.liquidity == 0 ||
             p.initialTick <= -887220 || p.initialTick >= 887220) revert InvalidLaunch();
-        bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", approvalHash(p, msg.sender, msg.value, reportHash, expiry)));
-        if (ecrecover(digest, v, r, s) != attester) revert Unauthorized();
+        bytes32 digest = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", approvalHash(p, msg.sender, msg.value, reportHash, expiry, nonce)));
+        if (!validApproval(digest, signature)) revert Unauthorized();
 
         usedReport[reportHash] = true;
+        usedNonce[msg.sender][nonce] = true;
         bytes32 salt = keccak256(abi.encode(msg.sender, p.tokenSalt));
         FixedToken coin = new FixedToken{salt: salt}(p.name, p.symbol, SUPPLY, msg.sender);
         token = address(coin);
@@ -85,6 +91,21 @@ contract LaunchFactory {
         coin.transfer(msg.sender, p.creatorAllocation);
         emit Launched(msg.sender, token, hook, reportHash, p.creatorAllocation, hypeSeed, tokenSeed, SUPPLY - p.creatorAllocation - tokenSeed);
         payNative(msg.sender, msg.value - hypeSeed);
+    }
+
+    function validApproval(bytes32 digest, bytes calldata signature) private view returns (bool) {
+        if (attester.code.length != 0) {
+            try IERC1271(attester).isValidSignature(digest, signature) returns (bytes4 result) {
+                return result == IERC1271.isValidSignature.selector;
+            } catch {
+                return false;
+            }
+        }
+        if (signature.length != 65) return false;
+        (bytes32 r, bytes32 s, uint8 v) =
+            (bytes32(signature[0:32]), bytes32(signature[32:64]), uint8(signature[64]));
+        if (uint256(s) > 0x7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0) return false;
+        return ecrecover(digest, v, r, s) == attester;
     }
 
     /// @notice Exact-input swap with authenticated payer, minimum output, and expiry.
