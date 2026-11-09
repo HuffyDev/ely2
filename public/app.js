@@ -1,71 +1,87 @@
 const $ = id => document.getElementById(id);
-const dark = matchMedia('(prefers-color-scheme: dark)');
-function theme(value) {
-  document.documentElement.dataset.theme = value;
-  $('theme').textContent = value === 'dark' ? 'Light mode' : 'Dark mode';
+const motion = matchMedia('(prefers-reduced-motion: no-preference)');
+let theme = 'dark';
+try { theme = localStorage.getItem('hook-theme') === 'light' ? 'light' : 'dark'; } catch {}
+function applyTheme() {
+  document.documentElement.dataset.theme = theme;
+  $('theme').textContent = theme === 'dark' ? '☼' : '☾';
+  $('theme').setAttribute('aria-label', theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
 }
-theme(localStorage.getItem('hook-theme') ?? (dark.matches ? 'dark' : 'light'));
+applyTheme();
 $('theme').onclick = () => {
-  const value = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-  localStorage.setItem('hook-theme', value);
-  theme(value);
+  theme = theme === 'dark' ? 'light' : 'dark';
+  applyTheme();
+  try { localStorage.setItem('hook-theme', theme); } catch {}
 };
-const el = (tag, value, className) => {
-  const node = document.createElement(tag);
-  node.textContent = value;
-  if (className) node.className = className;
-  return node;
-};
-function show(report) {
-  const target = $('report');
-  const table = el('table', '');
-  const header = table.createTHead().insertRow();
-  for (const label of ['Elapsed', 'Buy fee', 'Subsequent sell fee']) header.append(el('th', label));
-  const body = table.createTBody();
-  for (const check of report.checks) {
-    const row = body.insertRow();
-    for (const value of [check.seconds + 's', check.buy / 100 + '%', check.sell / 100 + '%']) row.append(el('td', value));
-  }
-  const link = el('a', 'Open shareable report ↗');
-  link.href = '/?report=' + report.id + '#studio';
-  const sim = report.simulation;
-  const result = sim?.status === 'passed'
-    ? sim.roundTrips + ' holder round trips passed · ' + sim.environment + (sim.block ? ' at block ' + sim.block : '') + ' · ' + sim.executionGas.toLocaleString() + ' execution gas · seed ' + sim.nativeSeedWei + ' wei of simulated seed.'
-    : sim?.reason ?? 'This report predates execution checks.';
-  const note = report.spec.triggerSeconds
-    ? 'The schedule applies to subsequent sells in the $HOOK pool after an outgoing transfer from the registered creator wallet. The initiating sale can pay the prior rate.'
-    : 'The schedule shows LP fees at the phase boundaries.';
-  target.replaceChildren(el('div', report.source, 'eyebrow'), el('h2', 'Behaviour report'), el('p', note), table,
-    el('p', result));
-  if (report.launch) target.append(el('p', 'Simulated ' + report.launch.name + ' (' + report.launch.symbol + ') for ' + report.launch.creator + '.'));
-  if (report.cost) {
-    const dollars = report.cost.seedUsd == null ? 'USD estimate unavailable' :
-      'approximately ' + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(report.cost.seedUsd) +
-      ' at the HYPE/USDC spot midpoint (' + report.cost.asOf + ')';
-    target.append(el('p', report.cost.seedHype + ' HYPE permanently locked · ' + dollars + '.'));
-  }
-  if (report.reportHash) target.append(el('p', 'Report hash ' + report.reportHash, 'report-hash'));
-  target.append(el('p', 'These results apply to the simulated pool and trades. The preview cannot submit a launch.'), link);
+if (motion.matches && 'IntersectionObserver' in window) {
+  document.body.classList.add('motion');
+  const observer = new IntersectionObserver(entries => {
+    for (const entry of entries) if (entry.isIntersecting) {
+      entry.target.classList.add('in');
+      observer.unobserve(entry.target);
+    }
+  });
+  document.querySelectorAll('.reveal').forEach(section => observer.observe(section));
 }
-async function read(url, options) {
-  const res = await fetch(url, options);
-  const data = await res.json();
-  if (!res.ok) throw Error(data.error);
-  return data;
+async function read(path) {
+  const response = await fetch(path);
+  if (!response.ok) throw Error('Unavailable');
+  return response.json();
 }
-$('example').onclick = () => document.getElementById('report').scrollIntoView({ block: 'start' });
+const buttons = [...document.querySelectorAll('[data-phase]')];
+buttons.forEach(button => { button.disabled = true; });
 try {
-  show(await read('/demo-report.json'));
+  const report = await read('demo-report.json');
+  const { simulation, spec } = report;
+  const format = new Intl.NumberFormat('en-US');
+  $('fork').textContent = 'Saved · Elysium fork';
+  $('trips').textContent = format.format(simulation.roundTrips);
+  $('block').textContent = format.format(Number(simulation.block));
+  $('seed').textContent = format.format(Number(simulation.nativeSeedWei) / 1e18) + ' HYPE';
+  const minutes = spec.triggerSeconds / 60;
+  const phases = [
+    [spec.sellBps, 'Before the registered wallet transfers tokens. The initiating sale can pay this rate.'],
+    [spec.triggerSellBps, 'For ' + minutes + ' minutes after the transfer, this rate applies to subsequent sells in the $HOOK pool.'],
+    [spec.sellBps, 'The window has expired. The sell fee returns to its steady rate.'],
+  ];
+  let timer;
+  const show = phase => {
+    const [bps, note] = phases[phase];
+    buttons.forEach((button, index) => button.setAttribute('aria-pressed', String(index === phase)));
+    $('fee').textContent = bps / 100 + '%';
+    $('phase-note').textContent = note;
+    if (motion.matches) $('phase-result').animate([{ opacity: .45, transform: 'translateY(5px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 220 });
+  };
+  buttons.forEach((button, index) => {
+    button.disabled = false;
+    button.onclick = () => { clearTimeout(timer); show(index); };
+  });
+  $('play').disabled = false;
+  $('play').onclick = () => {
+    clearTimeout(timer);
+    if (!motion.matches) return show(1);
+    show(0);
+    timer = setTimeout(() => {
+      show(1);
+      timer = setTimeout(() => show(2), 2200);
+    }, 550);
+  };
+  show(0);
 } catch {
-  $('report').replaceChildren(el('h2', 'Saved report unavailable'), el('p', 'Refresh to try again. Launches remain locked.'));
+  $('fork').textContent = 'Report unavailable';
+  $('phase-note').textContent = 'The saved report could not load. Refresh to try again.';
 }
 try {
-  const templates = await read('/templates.json');
-  for (const template of templates) {
-    const card = el('article', '', 'template');
-    card.append(el('strong', template.name), el('p', template.text));
-    $('templates').append(card);
-  }
+  const templates = await read('templates.json');
+  $('templates').replaceChildren(...templates.map(template => {
+    const card = document.createElement('article');
+    const title = document.createElement('strong');
+    title.textContent = template.name;
+    const description = document.createElement('p');
+    description.textContent = template.text;
+    card.append(title, description);
+    return card;
+  }));
 } catch {
-  $('templates').replaceChildren(el('p', 'The behaviour library is unavailable.'));
+  $('templates').textContent = 'The rule library could not load.';
 }

@@ -1,19 +1,44 @@
 <!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'"><meta name="viewport" content="width=device-width, initial-scale=1"><title>$HOOK · Behaviour Studio</title><link rel="stylesheet" href="/style.css"><script src="/app.js" type="module"></script></head>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'">
+<meta name="theme-color" content="#0c0b12">
+<title>$HOOK — Give your coin rules</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js" type="module"></script>
+</head>
 <body>
-<header><div class="bar"><a class="brand" href="#studio"><span aria-hidden="true">◈</span> $HOOK</a><nav aria-label="Workspace"><a href="#studio">Studio</a><a href="#library">Library</a><a href="#report">Report</a><a href="#docs">Docs</a></nav><button type="button" class="theme" id="theme">Dark mode</button></div></header>
-<main>
-<section id="studio" aria-labelledby="hero-title">
-<div class="hero"><div class="eyebrow">Behaviour Studio for Elysium</div><h1 id="hero-title">Program your coin’s behaviour in <em>plain English.</em></h1><p class="intro">See how a plain-English rule becomes a Uniswap v4 fee schedule, then inspect the results of real swaps executed on a pinned Elysium fork.</p></div>
-<div class="workspace">
-<div class="strip"><strong>Preview: launches locked</strong><span>Saved simulation results · Elysium fork block 3,122,111</span></div>
-<div class="panel" id="draft"><label for="prompt">Example behaviour</label><textarea id="prompt" readonly>After a transfer out of the registered creator wallet, charge 5% on subsequent sells in the $HOOK pool for 30 minutes.</textarea><div class="form-foot"><span id="mode">Recorded demonstration</span><button class="primary" type="button" id="example">View saved fork report ↗</button></div><p id="error" role="alert"></p></div>
-<div class="panel" id="report" aria-live="polite"><h2>Registered wallet example</h2><p>An outgoing transfer starts a 30-minute window for subsequent sells in the $HOOK pool. An initiating creator sale can pay the prior rate. The saved report is loading.</p></div>
-
+<header class="header"><div class="shell nav"><a class="brand" href="#"><span class="mark" aria-hidden="true">↳</span> $HOOK</a><nav aria-label="Main"><a href="#studio">Studio</a><a href="#proof">Proof</a><a href="#library">Library</a></nav><button type="button" id="theme" class="icon" aria-label="Switch colour theme">☼</button></div></header>
+<main class="shell">
+<section class="hero" id="studio">
+<div class="hero-copy">
+<div class="badge"><span></span> ELYSIUM · UNISWAP V4</div>
+<h1>Give your coin<br><em>its own rules.</em></h1>
+<p>Program your coin’s behaviour in plain English. See the rule, play through its phases, and check what happened when holders tried to sell.</p>
+<a class="primary" href="#demo">Play the demo <span aria-hidden="true">↘</span></a>
+<div class="lock">◈ &nbsp; Preview: launches locked</div>
+</div>
+<div class="console" id="demo">
+<div class="console-top"><span><b>01</b> Behaviour studio</span><span class="pill">Recorded demo</span></div>
+<div class="prompt"><span>THE PROMPT</span><p>“After the creator wallet sends tokens, charge <strong>5% on later sells</strong> for 30 minutes.”</p></div>
+<div class="interactive">
+<div class="phases" role="group" aria-label="Fee phase"><button data-phase="0" aria-pressed="true">Before</button><button data-phase="1" aria-pressed="false">Triggered</button><button data-phase="2" aria-pressed="false">Expired</button></div>
+<div id="phase-result" class="phase-result" aria-live="polite"><div><span class="label">SELL FEE</span><strong id="fee">—</strong></div><p id="phase-note">Loading the saved rules…</p></div>
+<button type="button" class="play" id="play" disabled>Replay the trigger <span aria-hidden="true">↻</span></button>
+</div>
 </div>
 </section>
-<section id="library" class="below"><h2>Behaviour library</h2><div id="templates" class="templates"></div></section>
-
-<section id="docs" class="below"><h2>How rules work</h2><details open><summary>What starts the fee window?</summary><p>A successful nonzero transfer to another address from the registered creator wallet starts or extends the window, including gifts, liquidity deposits and settlement of sales. v4 calculates fees before settlement, so an initiating sale can pay the prior rate. The elevated rate applies only to subsequent sells in the $HOOK pool. Unrelated wallets cannot be linked to the creator.</p></details><details><summary>What this does not do</summary><p>It cannot identify unrelated wallets. An intermediary can wait for the window to expire before selling. Gifts and liquidity deposits from the registered wallet also start the window.</p></details><details><summary>What does the execution report cover?</summary><p>The saved report records a creator sale and ten holder buy/sell round trips on Elysium fork block 3,122,111. Those outcomes apply to the tested liquidity, wallet sizes and fee phases.</p></details><details><summary>What can I program?</summary><p>Set buy and sell LP fees up to 5%, an optional opening window and an optional sell surcharge after a registered-wallet transfer. Fees use the highest applicable rate.</p></details></section>
-</main><footer><div class="bar"><strong>$HOOK</strong><span>Behaviour Studio · Preview</span></div></footer></body></html>
+<section id="proof" class="section reveal">
+<div class="section-head"><div><div class="kicker">02 / FORK EVIDENCE</div><h2>We ran the swaps.</h2></div><span id="fork" class="pill">Loading saved report</span></div>
+<div class="stats"><article><span>Holder round trips passed</span><strong id="trips">—</strong></article><article><span>Fork block</span><strong id="block">—</strong></article><article><span>Simulated locked seed</span><strong id="seed">—</strong></article></div>
+<div class="proof-footer"><p>Real v4 execution on a pinned Elysium fork. These results cover the trades and liquidity tested.</p><a class="ghost" href="demo-report.json">View report JSON ↗</a></div>
+</section>
+<section id="library" class="section reveal">
+<div class="section-head"><div><div class="kicker">03 / RULE LIBRARY</div><h2>Pick a starting rule.</h2></div></div>
+<div id="templates" class="templates"><p>Loading rules…</p></div>
+</section>
+<section class="section limits reveal" id="docs"><div class="kicker">04 / THE FINE PRINT</div><h2>Know the edges.</h2><details><summary>Does the first creator sale pay 5%?</summary><p>It can pay the prior rate. Uniswap v4 calculates fees before settlement. The elevated rate applies to subsequent sells in the $HOOK pool.</p></details><details><summary>What starts the window?</summary><p>A nonzero outgoing transfer from the registered creator wallet, including gifts and liquidity deposits. The rule cannot identify unrelated wallets, and an intermediary can wait until the window expires.</p></details><details><summary>Can I launch from this preview?</summary><p>Launches and wallet submission are locked. This public preview shows saved evidence and does not run live simulations.</p></details></section>
+</main><footer class="shell footer"><a class="brand" href="#">$HOOK</a><span>Behaviour studio · Locked preview</span></footer>
+</body></html>
