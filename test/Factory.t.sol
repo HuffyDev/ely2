@@ -13,6 +13,10 @@ contract FactoryTest is Test {
     uint256 private constant SIGNER = 0xA77E57;
 
     function test_AtomicLaunchAndCreatorTrigger() public {
+        string memory rpc = vm.envOr("HOOK_TEST_RPC", string(""));
+        if (bytes(rpc).length != 0) {
+            vm.createSelectFork(rpc, vm.envUint("HOOK_TEST_BLOCK"));
+        }
         address creator = makeAddr("creator");
         address forkManager = vm.envOr("HOOK_FORK_MANAGER", address(0));
         IPoolManager manager = forkManager == address(0) ? IPoolManager(address(new PoolManager(address(this)))) : IPoolManager(forkManager);
@@ -50,6 +54,8 @@ contract FactoryTest is Test {
         assertEq(deployed, token);
         assertEq(FixedToken(token).balanceOf(creator), 10 ether);
         assertEq(FixedToken(token).totalSupply(), factory.SUPPLY());
+        roundTrip(factory, token, makeAddr("pre-trigger holder"), 1e9);
+        assertEq(LaunchFeeHook(hook).elevatedUntil(), 0);
         vm.startPrank(creator);
         FixedToken(token).approve(address(factory), 1 ether);
         factory.swap(token, false, 1 ether, 1, expiry);
@@ -57,16 +63,34 @@ contract FactoryTest is Test {
         assertEq(LaunchFeeHook(hook).elevatedUntil(), rules.triggerSeconds == 0 ? 0 : block.timestamp + rules.triggerSeconds);
         uint256 start = block.timestamp;
         uint256[5] memory times = [uint256(0), rules.windowSeconds > 0 ? uint256(rules.windowSeconds) - 1 : 0, rules.windowSeconds, rules.triggerSeconds > 0 ? uint256(rules.triggerSeconds) - 1 : 0, rules.triggerSeconds];
-        for (uint256 phase; phase < times.length; ++phase) {
-            vm.warp(start + times[phase]);
-            address holder = address(uint160(0x200 + phase));
-            vm.deal(holder, 0.1 ether);
-            vm.startPrank(holder);
-            uint128 amount = uint128(factory.swap{value: 0.1 ether}(token, true, 0.1 ether, 1, block.timestamp));
-            FixedToken(token).approve(address(factory), amount);
-            assertGt(factory.swap(token, false, amount, 1, block.timestamp), 0);
-            vm.stopPrank();
+        for (uint256 i = 1; i < times.length; ++i) {
+            uint256 value = times[i];
+            uint256 j = i;
+            while (j > 0 && times[j - 1] > value) {
+                times[j] = times[j - 1];
+                --j;
+            }
+            times[j] = value;
         }
+        for (uint256 phase; phase < times.length; ++phase) {
+            if (phase != 0 && times[phase] == times[phase - 1]) continue;
+            vm.warp(start + times[phase]);
+            roundTrip(factory, token, makeAddr("small holder"), 1e9);
+            roundTrip(factory, token, makeAddr("normal holder"), 0.1 ether);
+            roundTrip(factory, token, makeAddr("large holder"), 2 ether);
+        }
+    }
+
+    function roundTrip(LaunchFactory factory, address token, address holder, uint128 input) private {
+        vm.deal(holder, input);
+        vm.startPrank(holder);
+        uint128 amount = uint128(factory.swap{value: input}(token, true, input, 1, block.timestamp));
+        FixedToken(token).approve(address(factory), amount);
+        uint256 received = factory.swap(token, false, amount, 1, block.timestamp);
+        assertGt(received, 0);
+        assertEq(FixedToken(token).balanceOf(holder), 0);
+        vm.stopPrank();
+        emit log_named_uint("holder sell output in wei", received);
     }
 
     function predict(address factory, bytes32 salt, bytes32 hash) private pure returns (address) {

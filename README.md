@@ -37,7 +37,7 @@ Start with fees and one opening window. Defer wallet identity features, fee cust
 
 Proposed later economics are zero launch fee, 5% of a separately accounted hook fee for the treasury, and 2% of that same fee for an authenticated original library author on reuse. At a 5% hook fee those shares are 25 and 10 basis points of swap notional respectively, within the user-facing cap. This funds ongoing infrastructure without charging free pools. Treasury buybacks would be separate transactions with published receipts. The current LP-fee hook does not implement fee custody or enforce these rates.
 
-The Elysium fork fixture uses approximately 1.5 million factory execution gas and just under 100 native HYPE, with tick 0 and 100 liquidity units. It locks a large unused token remainder at the factory. These parameters are for reproducibility, not a production liquidity recommendation. Quote execution gas × effective gas price plus rollup posting charges at the time of rehearsal, and show the HYPE seed separately as capital committed. Do not use Foundry's fixture gas as a launch estimate.
+The Elysium fork fixture uses 1,552,126 factory execution gas for the creator-sell demo and just under 100 native HYPE, with tick 0 and 100 liquidity units. It locks a large unused token remainder at the factory. These parameters are for reproducibility, not a production liquidity recommendation. Quote execution gas × effective gas price plus rollup posting charges at the time of rehearsal, and show the HYPE seed separately as capital committed. Do not use Foundry's fixture gas as a launch estimate.
 
 
 
@@ -51,7 +51,7 @@ HOOK_FORK_BLOCK=3122111
 HOOK_FORK_MANAGER=0xe2e105d3f7209a9da11f83ccf3e7398a753823f1
 ```
 
-HOOK_FORGE_BIN can point to a local forge executable. Without fork settings, the same fixture uses a locally deployed v4 PoolManager and the report labels that environment. Missing Foundry, timeouts or failing tests yield an unverified report. The run uses the exact draft rules with fixed fixture metadata, seed, creator allocation and swap sizes. It does not approve a creator-specific launch. The factory requires an immutable attester's signature binding chain, factory, manager, creator, funding, launch parameters, report hash and expiry. The fixture uses a test signer. Production signing, report replay and wallet submission remain disabled.
+HOOK_FORGE_BIN can point to a local forge executable. Without fork settings, the same fixture uses a locally deployed v4 PoolManager and the report labels that environment. Missing Foundry, timeouts or failing tests yield an unverified report. The run uses the exact draft rules with fixed fixture metadata, seed, creator allocation and swap sizes. It records positive native output for every holder round trip. The demo executes ten round trips: one before the creator sell and small, normal and large trades at each of 0, 1799 and 1800 seconds after it. It does not approve a creator-specific launch. The factory requires an immutable attester's signature binding chain, factory, manager, creator, funding, launch parameters, report hash and expiry. The fixture uses a test signer. Production signing, report replay and wallet submission remain disabled.
 
 ## Verify a real Claude key
 

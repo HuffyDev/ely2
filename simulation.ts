@@ -19,19 +19,19 @@ export async function simulate(spec: Spec) {
     SIM_OPEN_BUY: String(spec.openingBuyBps), SIM_OPEN_SELL: String(spec.openingSellBps),
     SIM_WINDOW: String(spec.windowSeconds), SIM_TRIGGER_FEE: String(spec.triggerSellBps),
     SIM_TRIGGER_WINDOW: String(spec.triggerSeconds),
-    ...(fork ? { HOOK_FORK_MANAGER: manager, ETH_RPC_URL: rpc } : {}),
+    ...(fork ? { HOOK_FORK_MANAGER: manager, HOOK_TEST_RPC: rpc, HOOK_TEST_BLOCK: block } : {}),
   });
   busy = true;
   try {
     const { stdout } = await run(process.env.HOOK_FORGE_BIN || 'forge', [
-      'test', '--match-contract', '^FactoryTest$', '--match-test', '^test_AtomicLaunchAndCreatorTrigger$', '-vv',
-      ...(fork ? ['--fork-block-number', block!] : []),
+      'test', '--match-contract', '^FactoryTest$', '--match-test', '^test_AtomicLaunchAndCreatorTrigger', '-vv',
     ], { env, timeout: 90000, windowsHide: true });
     const gas = stdout.match(/fixture launch execution gas:\s*(\d+)/)?.[1];
     const seed = stdout.match(/fixture native seed in wei:\s*(\d+)/)?.[1];
-    if (!gas || !seed || !stdout.includes('[PASS] test_AtomicLaunchAndCreatorTrigger()')) throw Error();
+    const outputsWei = [...stdout.matchAll(/holder sell output in wei:\s*(\d+)/g)].map(match => match[1]);
+    if (!gas || !seed || outputsWei.length < 4 || !stdout.includes('[PASS] test_AtomicLaunchAndCreatorTrigger()')) throw Error();
     return { status: 'passed', environment: fork ? 'Pinned RPC fork' : 'Local v4 PoolManager', block: fork ? block : null,
-      executionGas: Number(gas), nativeSeedWei: seed, roundTrips: 5 };
+      executionGas: Number(gas), nativeSeedWei: seed, roundTrips: outputsWei.length, outputsWei };
   } catch {
     return { status: 'failed', reason: 'Execution simulation could not be verified. Check Foundry and fork configuration.' };
   } finally {
