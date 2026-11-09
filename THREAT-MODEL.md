@@ -1,0 +1,11 @@
+# Threat model
+
+A prompt and its model response are untrusted data. The model cannot call tools, generate deployable source, choose addresses, or bypass validation. Strict parsing rejects unknown fields. The first spec permits a fixed buy and sell LP fee and one bounded launch window. The aggregate ceiling for the hook-controlled LP fee is 500 basis points per direction. Uniswap protocol fees are separate.
+
+A v4 callback sees the router as sender. Using it or tx.origin as wallet identity misattributes swaps. The factory router authenticates the direct payer through msg.sender and token settlement. The hook trusts payer data only from that router. Creator sales through another router, a different pool, or an intermediary wallet can bypass the trigger. Third parties may sell on other routers normally. Defer wallet quotas. A v4 pool hook applies only to its pool. Alternate pools and transfers can bypass pool-specific behavior.
+
+A positive sell quote requires actual in-range liquidity and a trade above rounding dust. Arithmetic checks cannot guarantee execution. Before opening wallet submission, bind a simulation report to the exact chain, factory, deployment calldata, bytecode, creator allocation, initial price and liquidity. Require buy/sell round trips including time boundaries, both swap types, depleted liquidity, adversarial sequencing and fuzzed trades against real PoolManager bytecode. Direct calls to any future public factory must face the same deployment gate. Never enable launch using an unsigned browser report.
+
+Prefer immutable locked liquidity for initial releases. Prove initialization and funding are atomic, enforce a minimum HYPE reserve and publish position range and creator allocation. A one-sided token position starts with zero HYPE reserves. Sellability tests need to account for that initial state. Freeze source and artifacts and obtain an independent security review before mainnet.
+
+The daily AI reservation is persisted before dispatch. Ambiguous or failed calls consume their reservation. Run a single deployment with shared durable SQLite. Keep prompts private unless the creator explicitly publishes a report. Exposure of a report URL discloses the typed rules and measured outcomes.

@@ -1,0 +1,12 @@
+[profile.default]
+src = "contracts"
+test = "test"
+libs = ["node_modules"]
+solc_version = "0.8.26"
+evm_version = "cancun"
+optimizer = true
+via_ir = true
+remappings = ["v4-core/=node_modules/@uniswap/v4-core/", "forge-std/=node_modules/@uniswap/v4-core/lib/forge-std/src/", "solmate/=node_modules/@uniswap/v4-core/lib/solmate/"]
+
+[fuzz]
+runs = 1024

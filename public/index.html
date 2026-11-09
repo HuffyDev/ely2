@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>$HOOK · Behaviour Studio</title><link rel="stylesheet" href="/style.css"><script src="/app.js" type="module"></script></head>
+<body>
+<header><div class="bar"><a class="brand" href="#studio"><span aria-hidden="true">◈</span> $HOOK</a><nav aria-label="Workspace"><a href="#studio">Studio</a><a href="#library">Library</a><a href="#explore">Explore</a><a href="#docs">Docs</a></nav><button type="button" class="theme" id="theme">Dark mode</button></div></header>
+<main>
+<section id="studio" aria-labelledby="hero-title">
+<div class="hero"><div class="eyebrow">Behaviour Studio for Elysium</div><h1 id="hero-title">Program your coin’s behaviour in <em>plain English.</em></h1></div>
+<div class="workspace">
+<form class="panel" id="draft"><label for="prompt">How should your coin behave?</label><textarea id="prompt" maxlength="1500" required>If the dev sells, raise sell fees to 5% for 30 minutes.</textarea><button type="button" id="example">Use the creator-sell example</button><div class="form-foot"><span id="mode">Loading drafting options…</span><button class="primary" type="submit">Draft and test <span aria-hidden="true">↗</span></button></div><p id="error" role="alert"></p></form>
+<div class="panel" id="report" aria-live="polite"><h2>Creator-sell example</h2><p>A sell from the creator’s wallet through the $HOOK router raises sell fees to 5% for 30 minutes. Run the example to generate a report.</p></div>
+<div class="strip"><strong>Mainnet launch locked</strong><span>Reports show measured sell outcomes for the wallets and phases exercised.</span></div>
+</div>
+</section>
+<section id="library" class="below"><h2>Behaviour library</h2><div id="templates" class="templates"></div></section>
+<section id="explore" class="below"><h2>Live coins</h2><p>The launch registry is offline while mainnet launch is locked.</p></section>
+<section id="docs" class="below"><h2>How rules work</h2><details open><summary>What counts as a creator sell?</summary><p>A direct sale funded by the creator’s wallet through the $HOOK router starts or extends the window. Sales through other routers, intermediary wallets or other pools can bypass the trigger.</p></details><details><summary>What does the execution report cover?</summary><p>When Foundry is configured, the report runs the draft through a v4 execution fixture. It checks a creator sale and holder buy/sell round trips. The fixture liquidity and trade sizes bound the result.</p></details><details><summary>What can I program?</summary><p>Set buy and sell LP fees up to 5%, an optional opening window and an optional creator-sell surcharge. Fees use the highest applicable rate.</p></details></section>
+</main><footer><div class="bar"><strong>$HOOK</strong><span>Behaviour Studio · Preview</span></div></footer></body></html>
